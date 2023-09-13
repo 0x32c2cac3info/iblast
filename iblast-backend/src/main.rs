@@ -1,6 +1,6 @@
 #![allow(unused_imports, unused_variables)]
 use console_subscriber::ConsoleLayer;
-use tracing::{self, instrument};
+use tracing::{self, error, warn, debug, info, instrument};
 use tracing_rolling::{Checker, Daily};
 use tracing_subscriber::{prelude::*, EnvFilter};
 use tokio::{
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         .with_file(true)
         .with_line_number(true)
         .with_writer(
-            Daily::new("/mnt/line-server.log", "[year][month][day]", offset!(+8))
+            Daily::new("iblast-backend.log", "[year][month][day]", offset!(+8))
                 .buffered()
                 .build()
                 .unwrap(),
