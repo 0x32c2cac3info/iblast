@@ -1,4 +1,5 @@
 #![allow(unused_imports, unused_variables)]
+use std::net::TcpListener;
 use console_subscriber::ConsoleLayer;
 use tracing::{self, error, warn, debug, info, instrument};
 use tracing_rolling::{Checker, Daily};
@@ -19,17 +20,10 @@ use atty;
 //use metrics_util::layers::Stack;
 //use metrics_exporter_prometheus::PrometheusBuilder;
 use time::macros::offset;
+use anyhow::{self, anyhow as ah, bail, Context};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Build our tower layers
-    // Note that the `Layer` abstraction is to resemble
-    // the nesting of futures, and were named layers
-    // to resemble the onion's layering structure.
-    //
-    // Note: If ogres are like onions because they have
-    // layers, and tower::Layer is like an onion, then
-    // ogres like Shrek must be tower::Layer's too.)
     //let metrics_layer = MetricsLayer::new();
 
     let console_layer = ConsoleLayer::builder().with_default_env().spawn();
@@ -62,4 +56,94 @@ async fn main() -> anyhow::Result<()> {
     //.with(metrics_layer).init();
 
     Ok(())
+}
+
+use actix_web::dev::Server;
+
+struct Web {
+    running: bool,
+    port: u16,
+    server: Server,
+}
+
+
+impl Web {
+    pub async fn build(config: Option<Config>) -> Result<Self, anyhow::Error> {
+        let config = config.unwrap_or(Config::default());
+        let address = format!("{}:{}", &config.web.host, &config.web.port);
+        let listener = TcpListener::bind(address)?;
+        // let port = listener.local_addr().unwrap().port();
+        let it = go(listener);
+        it.await
+    }
+}
+
+use actix_web::{
+    web::{
+        self,
+        Data,
+    },
+        App,
+        HttpServer,
+    
+};
+use actix_web_flash_messages::FlashMessagesFramework;
+use actix_web_flash_messages::{
+    storage::CookieMessageStore,
+};
+use actix_web::cookie::Key;
+
+async fn go(listener: TcpListener) -> Result<Web, anyhow::Error> {
+    let key = Key::from(sec::SECRET_KEY.as_bytes());
+    let msg_store = CookieMessageStore::builder(key).build();
+    let framework = FlashMessagesFramework::builder(msg_store).build();
+    let port = listener.local_addr().unwrap().port();
+    let it = HttpServer::new(move || {
+        App::new()
+            .wrap(framework.clone())
+            .route("/", web::get().to(nothing))
+
+    })
+    .listen(listener)?
+    .run();
+    let web = Web { running: true, port, server: it };    
+    Ok(web)
+}
+
+pub(crate) mod sec {
+    pub const SECRET_KEY: &str = "abc123456789";
+}
+
+struct Config {
+    web: WebConfig,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let web = WebConfig::default();
+        Config {
+            web,
+        }
+    }
+}
+
+struct WebConfig {
+    host: String,
+    port: u16,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        let host = String::from("127.0.0.1");
+        let port = 3000;
+        Self { host, port }
+    }
+}
+
+use actix_web::{http::header::ContentType, HttpResponse};
+
+pub async fn nothing() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type(ContentType::html())
+        .body("<!doctype html><html><p>hello 0x5010515 world!<p></html>")
 }
