@@ -1,5 +1,5 @@
 [package]
-name = "iblast-app"
+name = "iblast-backend"
 description = "A rust crate supplying binaries for the greed-ioland TCP line server and (if time allows) a REPL"
 authors.workspace = true
 # documentation.workspace = true
