@@ -1,0 +1,23 @@
+[workspace]
+members = ["iblast-app", "iblast"]
+resolver = "2"
+
+[workspace.package]
+authors = ["Anonymous"]
+documentation = ""
+homepage = ""
+repository = ""
+license = "Mozilla Public License Version 2.0" 
+edition = "2021"
+publish = false # Preferable to control via external script
+rust-version = "1.70.0"
+version = "0.1.0-alpha"
+
+[profile]
+[profile.dev]
+# opt-level = 3
+# lto = "thin"
+[profile.release]
+opt-level = 3
+lto = "fat"
+
