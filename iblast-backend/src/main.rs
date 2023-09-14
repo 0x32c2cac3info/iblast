@@ -17,7 +17,7 @@ use tokio::{
 
 use atty;
 use time::macros::offset;
-use anyhow::{self, anyhow as ah, bail, Context};
+use anyhow::{self, Error, anyhow as ah, bail, Context};
 use actix_web::dev::Server;
 use actix_web::{
     web::{
@@ -67,9 +67,13 @@ async fn main() -> anyhow::Result<()> {
         .with(filter_layer)
         .init();
 
+    let db_conf = DbSettings::new(sec::DB_CNX);
+    let db = get_cnx_pool(&db_conf).await;
     let web = Web::build(None).await?;        
-    Ok(())
+    let iblast = IBlast::new(web, db);
+    Ok(iblast.run_forever().await?)
 }
+
 
 
 struct Web {
@@ -78,23 +82,22 @@ struct Web {
     server: Server,
 }
 
-
 impl Web {
     pub async fn build(config: Option<Config>) -> Result<Self, anyhow::Error> {
-
         let config = config.unwrap_or(Config::default());        
         let address = format!("{}:{}", &config.web.host, &config.web.port);
         let listener = TcpListener::bind(address).await?;
         let it = go(listener);
         it.await
     }
-
-    pub fn get_cnx_pool(db_conf: &DbSettings) -> PgPool {
-        PgPoolOptions::new()
-            .acquire_timeout(::std::time::Duration::from_secs(10))
-            .connect_lazy_with(db_conf.with_db())
-    }
 }
+
+async fn get_cnx_pool(db_conf: &DbSettings) -> PgPool {
+    PgPoolOptions::new()
+        .acquire_timeout(::std::time::Duration::from_secs(10))
+        .connect_lazy_with(db_conf.with_db())
+}
+
 
 struct DbSettings {
     psql: String,
@@ -113,7 +116,8 @@ impl DbSettings {
 } 
 
 async fn go(listener: TcpListener) -> Result<Web, anyhow::Error> {
-    let key = Key::from(sec::SECRET_KEY.as_bytes());
+    let key = Key::try_generate().unwrap();
+    // let key = Key::from(sec::SECRET_KEY.as_bytes());
     let msg_store = CookieMessageStore::builder(key).build();
     let framework = FlashMessagesFramework::builder(msg_store).build();
     let port = listener.local_addr().unwrap().port();
@@ -132,7 +136,8 @@ async fn go(listener: TcpListener) -> Result<Web, anyhow::Error> {
 }
 
 pub(crate) mod sec {
-    pub const SECRET_KEY: &str = "abc123456789";
+    pub const SECRET_KEY: &str = "abc12345678900000000000000000000000000";
+    pub const DB_CNX: &str = "postgres://dmgolembiowski:wHE7G6IWZlxC@ep-ancient-king-22768956-pooler.us-east-2.aws.neon.tech/neondb";
 }
 
 struct Config {
@@ -166,4 +171,18 @@ pub async fn nothing() -> HttpResponse {
     HttpResponse::Ok()
         .content_type(ContentType::html())
         .body("<!doctype html><html><p>hello 0x5010515 world!<p></html>")
+}
+
+struct IBlast {
+    web: Web,
+    db: PgPool,
+}
+
+impl IBlast {
+    pub fn new(web: Web, db: PgPool) -> Self {
+        Self { web, db }
+    }
+    async fn run_forever(self) -> Result<(), std::io::Error> {
+        self.web.server.await
+    }
 }

@@ -23,5 +23,11 @@ console-subscriber = "0.1.10"
 time = { version = "0.3.24", features = ["macros", "formatting"] }
 actix-web = { version = "4.4.0", features = ["rustls"] }
 actix-web-flash-messages = { version = "0.4.2", features = ["actix-session", "cookies", "sessions"] }
+actix-rt = "2.9.0"
+lazy_static = "1.4.0"
+regex = { version = "1.9.5" }
+sqlx = { version = "0.7.1", features = ["runtime-tokio", "macros", "postgres", "uuid", "chrono", "migrate", "json", "ipnetwork", "time"] }
+url = "2.4.1"
+src = "0.0.6"
 
 
