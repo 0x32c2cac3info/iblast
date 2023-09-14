@@ -67,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
         .with(filter_layer)
         .init();
 
-    let db_conf = DbSettings::new(sec::DB_CNX);
+    let db_conf = DbSettings::new(&sec::DB_CNX);
     let db = get_cnx_pool(&db_conf).await;
     let web = Web::build(None).await?;        
     let iblast = IBlast::new(web, db);
@@ -137,7 +137,13 @@ async fn go(listener: TcpListener) -> Result<Web, anyhow::Error> {
 
 pub(crate) mod sec {
     pub const SECRET_KEY: &str = "abc12345678900000000000000000000000000";
-    pub const DB_CNX: &str = "postgres://dmgolembiowski:wHE7G6IWZlxC@ep-ancient-king-22768956-pooler.us-east-2.aws.neon.tech/neondb";
+    
+    lazy_static::lazy_static! {
+        pub static ref DB_CNX: &'static str = Box::leak(Box::new(
+            std::env::var("NEON")
+            .unwrap_or("postgres://postgres:password@localhost/db".to_string())
+        ));
+    }
 }
 
 struct Config {
