@@ -1,5 +1,4 @@
 #![allow(unused_imports, unused_variables)]
-use std::net::TcpListener;
 use console_subscriber::ConsoleLayer;
 use tracing::{self, error, warn, debug, info, instrument};
 use tracing_rolling::{Checker, Daily};
@@ -13,19 +12,33 @@ use tokio::{
         oneshot, Mutex,
         watch,
     },
-    time::{sleep, Instant},
+    time::{sleep, Instant}, net::TcpListener,
 };
+
 use atty;
-//use metrics_tracing_context::{MetricsLayer, TracingContextLayer};
-//use metrics_util::layers::Stack;
-//use metrics_exporter_prometheus::PrometheusBuilder;
 use time::macros::offset;
 use anyhow::{self, anyhow as ah, bail, Context};
+use actix_web::dev::Server;
+use actix_web::{
+    web::{
+        self,
+        Data,
+    },
+        App,
+        HttpServer,
+    
+};
+use actix_web_flash_messages::FlashMessagesFramework;
+use actix_web_flash_messages::{
+    storage::CookieMessageStore,
+};
+use actix_web::cookie::Key;
+use actix_web::{http::header::ContentType, HttpResponse};
+use sqlx::{PgPool, postgres::{PgPoolOptions, PgConnectOptions}};
+use url::{Url, ParseError};
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    //let metrics_layer = MetricsLayer::new();
-
     let console_layer = ConsoleLayer::builder().with_default_env().spawn();
 
     let console_fmt_layer = tracing_subscriber::fmt::layer()
@@ -53,12 +66,11 @@ async fn main() -> anyhow::Result<()> {
         .with(console_fmt_layer)
         .with(filter_layer)
         .init();
-    //.with(metrics_layer).init();
 
+    let web = Web::build(None).await?;        
     Ok(())
 }
 
-use actix_web::dev::Server;
 
 struct Web {
     running: bool,
@@ -69,36 +81,45 @@ struct Web {
 
 impl Web {
     pub async fn build(config: Option<Config>) -> Result<Self, anyhow::Error> {
-        let config = config.unwrap_or(Config::default());
+
+        let config = config.unwrap_or(Config::default());        
         let address = format!("{}:{}", &config.web.host, &config.web.port);
-        let listener = TcpListener::bind(address)?;
-        // let port = listener.local_addr().unwrap().port();
+        let listener = TcpListener::bind(address).await?;
         let it = go(listener);
         it.await
     }
+
+    pub fn get_cnx_pool(db_conf: &DbSettings) -> PgPool {
+        PgPoolOptions::new()
+            .acquire_timeout(::std::time::Duration::from_secs(10))
+            .connect_lazy_with(db_conf.with_db())
+    }
 }
 
-use actix_web::{
-    web::{
-        self,
-        Data,
-    },
-        App,
-        HttpServer,
-    
-};
-use actix_web_flash_messages::FlashMessagesFramework;
-use actix_web_flash_messages::{
-    storage::CookieMessageStore,
-};
-use actix_web::cookie::Key;
+struct DbSettings {
+    psql: String,
+}
+
+impl DbSettings {
+    pub fn new(psql: &str) -> Self {
+        let psql = String::from(psql);
+        Self { psql }
+    }
+    fn with_db(&self) -> PgConnectOptions {
+        use sqlx::ConnectOptions;
+        let ops = Url::parse(self.psql.as_str()).unwrap();
+        PgConnectOptions::from_url(&ops).unwrap()
+    }
+} 
 
 async fn go(listener: TcpListener) -> Result<Web, anyhow::Error> {
     let key = Key::from(sec::SECRET_KEY.as_bytes());
     let msg_store = CookieMessageStore::builder(key).build();
     let framework = FlashMessagesFramework::builder(msg_store).build();
     let port = listener.local_addr().unwrap().port();
-    let it = HttpServer::new(move || {
+    let mut listener = listener.into_std()?;
+    listener.set_nonblocking(true)?;
+    let server = HttpServer::new(move || {
         App::new()
             .wrap(framework.clone())
             .route("/", web::get().to(nothing))
@@ -106,7 +127,7 @@ async fn go(listener: TcpListener) -> Result<Web, anyhow::Error> {
     })
     .listen(listener)?
     .run();
-    let web = Web { running: true, port, server: it };    
+    let web = Web { running: true, port, server };    
     Ok(web)
 }
 
@@ -140,9 +161,8 @@ impl Default for WebConfig {
     }
 }
 
-use actix_web::{http::header::ContentType, HttpResponse};
-
 pub async fn nothing() -> HttpResponse {
+    info!("Client request incoming");
     HttpResponse::Ok()
         .content_type(ContentType::html())
         .body("<!doctype html><html><p>hello 0x5010515 world!<p></html>")
