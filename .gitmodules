@@ -1,0 +1,12 @@
+[submodule "vendor/background-jobs"]
+	path = vendor/background-jobs
+	url = https://git.asonix.dog/asonix/background-jobs.git
+[submodule "vendor/rust-builder"]
+	path = vendor/rust-builder
+	url = https://git.asonix.dog/asonix/rust-builder
+[submodule "vendor/multipart-client-stream"]
+	path = vendor/multipart-client-stream
+	url = https://git.asonix.dog/asonix/multipart-client-stream.git
+[submodule "vendor/streaming"]
+	path = vendor/streaming
+	url = https://git.asonix.dog/asonix/streaming.git
