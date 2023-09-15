@@ -10,6 +10,3 @@
 [submodule "vendor/streaming"]
 	path = vendor/streaming
 	url = https://git.asonix.dog/asonix/streaming.git
-[submodule "vendor/touchHLE"]
-	path = vendor/touchHLE
-	url = https://github.com/hikari-no-yume/touchHLE.git
