@@ -29,5 +29,8 @@ regex = { version = "1.9.5" }
 sqlx = { version = "0.7.1", features = ["runtime-tokio", "macros", "postgres", "uuid", "chrono", "migrate", "json", "ipnetwork", "time"] }
 url = "2.4.1"
 src = "0.0.6"
+async-graphql = { version = "6.0.6", features = ["dynamic-schema", "opentelemetry", "secrecy", "serde_cbor", "string_number", "time", "tokio", "tokio-sync", "tracing", "tracing-futures", "url", "uuid"] }
+poem = { version = "1.3.58", features = ["x509-parser", "tower", "tower-compat", "tokio-tungstenite", "tokio-stream", "tokio-rustls", "tokio-metrics", "time", "test", "session", "rustls", "redis", "redis-session", "opentelemetry", "multipart", "mime_guess", "csrf", "cookie", "async-compression", "anyhow", "acme-native-roots", "acme-webpki-roots", "acme", "static-files", "websocket"] }
+uuid = { version = "1.4.1", features = ["v4", "wasm-bindgen", "fast-rng", "js", "sha1", "zerocopy"] }
 
 
