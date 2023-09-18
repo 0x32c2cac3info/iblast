@@ -125,6 +125,23 @@ pub(crate) mod store {}
 pub(crate) mod creators {
 }
 
+/// View is the user interface component. It is responsible for rendering
+/// the user interface and for handling the user interaction.
+///
+/// Typical reponsibilities of views include:
+/// - listening for store changes and re-rendering
+/// - maintaining a local distinction of presentation and container views
+///   where presentation views don't connect to dispatchers or stores, only
+///   communicating via their own properties; container views are connected to 
+///   stores and provide the data for presentation components.
+/// 
+/// Container views, being connected to stores and dispatchers, listen for events
+/// from stores and provide the data for presentation components.
+/// They get new data using the store's public getter methods and then pass that data
+/// down the views tree.
+///
+/// Oh yeah, views maintain a tree structure by the way.
+/// 
 pub(crate) mod view {}
 
 /// Utilities that action creators use
