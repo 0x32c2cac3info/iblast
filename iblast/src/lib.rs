@@ -6,14 +6,16 @@ use anyhow::{Error, Result};
 /// be accepted at specific places. Ideally, they should be immutable.
 pub mod action {
     use crate::model::Detail;
-    
+    use serde::{Serialize};
+
+    #[derive(Serialize)]
     pub struct Create<'a> {
         pub detail: &'a Detail,
     }
 
     impl<'a> TryFrom<&'a Detail> for Create<'a> {
         type Error = anyhow::Error;
-        
+
         fn try_from(detail: &'a Detail) -> anyhow::Result<Self, Self::Error> {
             Ok(Self { detail })
         }
@@ -25,15 +27,18 @@ pub mod action {
 /// When a dispatcher receives a change action from a dispatcher, it will _dispatch_ that action
 /// to all registered stores.
 pub mod dispatcher {
-    use std::sync::mpsc::{Sender, Receiver};
     use std::collections::BTreeMap;
-    
+    use std::sync::mpsc::{Receiver, Sender};
+
     pub fn broadcast<'action>(topics: &'action [&'action str]) -> Broadcast {
         Broadcast::new(topics)
     }
 
-    pub struct Broadcast<'a, 'b> where 'b: 'a {
-        submission: BTreeMap<String, DisHandle<'a, 'b>>,
+    pub struct Broadcast<'a, 'b>
+    where
+        'b: 'a,
+    {
+        pub submission: BTreeMap<String, DisHandle<'a, 'b>>,
     }
 
     impl<'a, 'b> Broadcast<'a, 'b> {
@@ -51,15 +56,24 @@ pub mod dispatcher {
         }
     }
 
-    pub struct DisHandle<'a, 'b> where 'b: 'a {
-        name: &'b str,
-        sender: Sender<&'a [u8]>,
+    pub struct DisHandle<'a, 'b>
+    where
+        'b: 'a,
+    {
+        pub name: &'b str,
+        pub sender: Sender<&'a [u8]>,
     }
-    
-    impl<'a, 'b> DisHandle<'a, 'b> where 'b: 'a {
+
+    impl<'a, 'b> DisHandle<'a, 'b>
+    where
+        'b: 'a,
+    {
         pub fn new(topic_name: &'b str) -> anyhow::Result<Self> {
             let sender = crate::store::register_dispatcher(topic_name)?;
-            Ok(Self { name: topic_name, sender })
+            Ok(Self {
+                name: topic_name,
+                sender,
+            })
         }
     }
 }
@@ -76,21 +90,21 @@ pub mod dispatcher {
 /// A Store is an event emitter; they don't nest or take other stores as dependencies.
 pub mod store {
     use anyhow::bail;
-    use std::sync::Mutex;
-    use std::sync::mpsc::{Sender, Receiver};
-    use std::collections::HashSet;
     use once_cell::sync::OnceCell;
-    
+    use std::collections::HashSet;
+    use std::sync::mpsc::{Receiver, Sender};
+    use std::sync::Mutex;
+
     pub fn register_dispatcher<'a, 'b>(topic_name: &'a str) -> anyhow::Result<Sender<&'b [u8]>> {
         static TAKEN: OnceCell<Mutex<HashSet<String>>> = OnceCell::new();
-        let taken = TAKEN.get_or_init(|| { 
+        let taken = TAKEN.get_or_init(|| {
             let /* mut */ t = HashSet::<String>::new();
             Mutex::new(t)
         });
         let mut taken = taken.lock().unwrap();
-        let key = String::from(topic_name);        
+        let key = String::from(topic_name);
         if taken.contains(topic_name) {
-            bail!("Duplicate keys forbidden");    
+            bail!("Duplicate keys forbidden");
         }
         let (sender, _receiver) = std::sync::mpsc::channel::<&[u8]>();
         let _ = &mut taken.insert(key);
@@ -100,13 +114,14 @@ pub mod store {
 
 /// Action creators are functions that create and dispatch behavior.
 pub mod creators {
-    use anyhow::Result;
-    use crate::model::Detail;
     use crate::action::Create;
+    use crate::model::Detail;
+    use anyhow::Result;
     
     pub fn add_detail(detail: &Detail) -> Result<Create> {
         let create_detail = Create::try_from(detail);
-        create_detail
+        todo!("add_detail should emit the Create action to a dispatcher");
+        // create_detail
     }
 }
 
@@ -127,9 +142,7 @@ pub mod creators {
 ///
 /// Oh yeah, views maintain a tree structure by the way.
 ///
-pub mod view {
-    
-}
+pub mod view {}
 
 /// Utilities that action creators use
 /// to engage in high-level or encapsulated behaviors requiring
@@ -149,13 +162,23 @@ pub mod util {}
 /// - a call to update the associated store
 /// - when the store is updated it will emit a change event and as a result the view that
 ///   listens for that event will re-render
-pub mod api {
-
-}
+pub mod api {}
 
 pub mod model {
-    #[derive(Debug, Clone, Copy)]
+    use serde::{Serialize, Deserialize};
+    use serde::ser::{Serialize as Ser, Serializer, SerializeStruct};
+    
+    #[derive(Deserialize, Debug, Clone, Copy)]
     pub struct Detail {}
+
+    impl<'a> Ser for &'a Detail {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+            let Detail { .. } = *self;
+            let mut state = serializer.serialize_struct("Detail", 0)?;
+            state.end()
+        } 
+    }
+
 }
 
 #[cfg(test)]
@@ -172,14 +195,22 @@ mod tests {
 
     #[test]
     fn dispatch_create_detail() {
-        use crate::dispatcher as dp;
         use crate::action::Create;
+        use crate::dispatcher as dp;
         use crate::model::Detail;
-
+        use std::thread;
+        use bincode;
+        
         let to = vec!["Detail"];
-        let tx: dp::Broadcast = dp::broadcast(&to[..]);
-
-        todo!("Try broadcasting a create action")
+        let tx: dp::Broadcast = dp::broadcast(&Box::leak(Box::new(to.clone()))[..]);
+        for (topic, handle) in tx.submission.into_iter() {
+            thread::spawn(move || {
+                let detail = Detail {};
+                let create = creators::add_detail(&detail).unwrap();
+                let sent = handle.sender.send(&Box::leak(Box::new(bincode::serialize(&create).unwrap()))[..]);
+                assert!(sent.is_ok());
+            });
+        }
     }
 
     #[test]
