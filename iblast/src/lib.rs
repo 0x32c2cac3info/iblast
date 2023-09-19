@@ -6,7 +6,7 @@ use anyhow::{Error, Result};
 /// be accepted at specific places. Ideally, they should be immutable.
 pub mod action {
     use crate::model::Detail;
-    use serde::{Serialize};
+    use serde::Serialize;
 
     #[derive(Serialize)]
     pub struct Create<'a> {
@@ -111,7 +111,9 @@ pub mod store {
         Ok(sender)
     }
     #[derive(Default)]
-    pub struct LateInit<T> { cell: OnceCell<T> }
+    pub struct LateInit<T> {
+        cell: OnceCell<T>,
+    }
 
     impl<T> LateInit<T> {
         pub fn new() -> Self {
@@ -133,7 +135,7 @@ pub mod store {
     use scc::HashMap;
     use std::collections::hash_map::RandomState;
     use std::sync::Arc;
-    
+
     pub(crate) struct StoreFactory<'a> {
         pub registry: LateInit<HashMap<String, Receiver<&'a [u8]>>>,
     }
@@ -144,20 +146,22 @@ pub mod store {
             registry.init(HashMap::default());
             Self { registry }
         }
-        pub fn add_store(&self, topic_name: &str, receiver: Receiver<&'a [u8]>) -> anyhow::Result<()> {
+        pub fn add_store(
+            &self,
+            topic_name: &str,
+            receiver: Receiver<&'a [u8]>,
+        ) -> anyhow::Result<()> {
             bail!("not implemented");
         }
     }
 }
-
-
 
 /// Action creators are functions that create and dispatch behavior.
 pub mod creators {
     use crate::action::Create;
     use crate::model::Detail;
     use anyhow::Result;
-    
+
     pub fn add_detail(detail: &Detail) -> Result<Create> {
         let create_detail = Create::try_from(detail);
         // todo!("add_detail should emit the Create action to a dispatcher");
@@ -205,20 +209,22 @@ pub mod util {}
 pub mod api {}
 
 pub mod model {
-    use serde::{Serialize, Deserialize};
-    use serde::ser::{Serialize as Ser, Serializer, SerializeStruct};
-    
+    use serde::ser::{Serialize as Ser, SerializeStruct, Serializer};
+    use serde::{Deserialize, Serialize};
+
     #[derive(Deserialize, Debug, Clone, Copy)]
     pub struct Detail {}
 
     impl<'a> Ser for &'a Detail {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
             let Detail { .. } = *self;
             let mut state = serializer.serialize_struct("Detail", 0)?;
             state.end()
-        } 
+        }
     }
-
 }
 
 #[cfg(test)]
@@ -238,18 +244,27 @@ mod tests {
         use crate::action::Create;
         use crate::dispatcher as dp;
         use crate::model::Detail;
-        use std::thread;
         use bincode;
-        
+        use std::thread;
+
         let to = vec!["Detail"];
         let tx: dp::Broadcast = dp::broadcast(&Box::leak(Box::new(to.clone()))[..]);
-        for (topic, handle) in tx.submission.into_iter() {
-            thread::spawn(move || {
-                let detail = Detail {};
-                let create = creators::add_detail(&detail).unwrap();
-                let sent = handle.sender.send(&Box::leak(Box::new(bincode::serialize(&create).unwrap()))[..]);
-                assert!(sent.is_ok());
-            });
+        let mut handles: Vec<thread::JoinHandle<_>> = vec![];
+        {
+            for (topic, handle) in tx.submission.into_iter() {
+                let t = thread::spawn(move || {
+                    let detail = Detail {};
+                    let create = creators::add_detail(&detail).unwrap();
+                    let sent = handle
+                        .sender
+                        .send(&Box::leak(Box::new(bincode::serialize(&create).unwrap()))[..]);
+                    assert!(sent.is_ok());
+                });
+                &mut handles.push(t);
+            }
+            for handle in handles {
+                assert!(handle.join().is_ok());
+            }
         }
     }
 
@@ -262,7 +277,5 @@ mod tests {
     }
 
     #[test]
-    fn action_emit_detail() {
-    
-    }
+    fn action_emit_detail() {}
 }
