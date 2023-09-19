@@ -110,7 +110,47 @@ pub mod store {
         let _ = &mut taken.insert(key);
         Ok(sender)
     }
+    #[derive(Default)]
+    pub struct LateInit<T> { cell: OnceCell<T> }
+
+    impl<T> LateInit<T> {
+        pub fn new() -> Self {
+            let cell = OnceCell::default();
+            Self { cell }
+        }
+        pub fn init(&self, value: T) {
+            assert!(self.cell.set(value).is_ok())
+        }
+    }
+
+    impl<T> std::ops::Deref for LateInit<T> {
+        type Target = T;
+        fn deref(&self) -> &T {
+            self.cell.get().unwrap()
+        }
+    }
+
+    use scc::HashMap;
+    use std::collections::hash_map::RandomState;
+    use std::sync::Arc;
+    
+    pub(crate) struct StoreFactory<'a> {
+        pub registry: LateInit<HashMap<String, Receiver<&'a [u8]>>>,
+    }
+
+    impl<'a> StoreFactory<'a> {
+        pub fn new() -> Self {
+            let registry: LateInit<HashMap<String, Receiver<&'a [u8]>>> = LateInit::new();
+            registry.init(HashMap::default());
+            Self { registry }
+        }
+        pub fn add_store(&self, topic_name: &str, receiver: Receiver<&'a [u8]>) -> anyhow::Result<()> {
+            bail!("not implemented");
+        }
+    }
 }
+
+
 
 /// Action creators are functions that create and dispatch behavior.
 pub mod creators {
@@ -120,8 +160,8 @@ pub mod creators {
     
     pub fn add_detail(detail: &Detail) -> Result<Create> {
         let create_detail = Create::try_from(detail);
-        todo!("add_detail should emit the Create action to a dispatcher");
-        // create_detail
+        // todo!("add_detail should emit the Create action to a dispatcher");
+        create_detail
     }
 }
 
@@ -219,5 +259,10 @@ mod tests {
         let _original_handle = store::register_dispatcher("pikachu");
         let duplicate_handle = store::register_dispatcher("pikachu");
         assert!(duplicate_handle.is_err());
+    }
+
+    #[test]
+    fn action_emit_detail() {
+    
     }
 }
